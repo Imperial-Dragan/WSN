@@ -1,11 +1,20 @@
-# Solar-Aware GA Multi-Sink WSN — Full Project Report
+# Solar Aware Multisink Data Aggregation Protocol Using GA in a Wireless Sensor Assisted IoT — Full Project Report
 
-> A 7-day, plain-English, formula-by-formula walkthrough of `solar_ga_wsn.py`,
-> with worked examples (one default, one extreme) and head-to-head comparisons
-> against the most popular WSN clustering protocols in current literature.
+> A plain-English, formula-by-formula walkthrough of our project
+> `solar_ga_wsn.py`, with the **motivation**, the **methodology**, two
+> worked examples (one default, one extreme), explicit
+> **advantages / disadvantages** for our project and every comparison
+> algorithm, and a **future scope**.
+>
+> **Important:** LEACH is **not part of our project**. It is included
+> in the script and in this report **only as a baseline for
+> comparison**, because it is the most-cited reference protocol in the
+> WSN literature.
 
+**Project name:** Solar Aware Multisink Data Aggregation Protocol
+Using GA in a Wireless Sensor Assisted IoT
 **Repository:** `Imperial-Dragan/WSN`
-**Main file:** `solar_ga_wsn.py` (≈ 1080 lines)
+**Main file (our protocol):** `solar_ga_wsn.py` (≈ 1080 lines)
 **Companion docs:** `HOW_SOLAR_GA_WSN_WORKS.md`, `SOLAR_GA_WSN_TECHNICAL_DEEP_DIVE.md`
 **Report generated:** 29 May 2026
 
@@ -13,6 +22,8 @@
 
 ## Table of Contents
 
+- [Project Identity & Motivation — why we built this](#project-identity--motivation--why-we-built-this)
+- [Methodology — formulas, steps and ideas we use](#methodology--formulas-steps-and-ideas-we-use)
 - [Day 1 — What this project is and why it exists](#day-1--what-this-project-is-and-why-it-exists)
 - [Day 2 — How the simulation actually runs (one round, end-to-end)](#day-2--how-the-simulation-actually-runs-one-round-end-to-end)
 - [Day 3 — All the math, in plain words and worked numbers](#day-3--all-the-math-in-plain-words-and-worked-numbers)
@@ -20,8 +31,175 @@
 - [Day 5 — Extreme scenario: 1000 nodes, 500 m field, 1500 rounds](#day-5--extreme-scenario-1000-nodes-500m-field-1500-rounds)
 - [Day 6 — Comparison with 9 other algorithms from the literature](#day-6--comparison-with-9-other-algorithms-from-the-literature)
 - [Day 7 — Strengths, weaknesses, real-world fit, final verdict](#day-7--strengths-weaknesses-real-world-fit-final-verdict)
+- [Day 8 — Future Scope](#day-8--future-scope)
 - [Appendix A — Glossary](#appendix-a--glossary)
 - [Appendix B — Sources cited](#appendix-b--sources-cited)
+
+---
+
+# Project Identity & Motivation — why we built this
+
+## A. The official identity
+
+| Field | Value |
+|---|---|
+| **Project name** | Solar Aware Multisink Data Aggregation Protocol Using GA in a Wireless Sensor Assisted IoT |
+| **Domain** | Wireless Sensor Networks (WSN) for IoT applications |
+| **Algorithmic family** | Genetic Algorithm + multi-tier clustering + energy-harvesting-aware scheduling |
+| **Implementation** | Single-file Python simulator, `solar_ga_wsn.py` |
+| **Comparison baseline only** | LEACH (Heinzelman 2000) — included **purely** for benchmarking; it is not part of our protocol |
+
+## B. Why we are building this — the four problems we attack
+
+A WSN-assisted IoT system is exactly what powers smart farms,
+forest-fire detection, smart cities, structural-health monitoring,
+glacier sensing, and most modern environmental-monitoring deployments.
+The hardware works. The deployment story is a mess for four very
+specific reasons:
+
+1. **Battery is the bottleneck, not the sensor.** Replacing batteries
+   on hundreds or thousands of sensors deep in a field is very
+   expensive — sometimes physically impossible (forests, glaciers,
+   under-water buoys).
+2. **Long-distance radio is enormously more expensive than short
+   radio.** Once a node has to shout further than ~88 m, its energy
+   cost grows with `d⁴` instead of `d²`. A 150 m shout costs
+   roughly **22 ×** what a 50 m shout costs.
+3. **Existing classical protocols (LEACH, etc.) are battery-blind and
+   sun-blind.** They pick cluster heads randomly. They cannot tell
+   the difference between a node at 5% battery in shadow and a node
+   at 95% battery in full sunlight.
+4. **A single sink (Base Station) forces every cluster head into one
+   long shout per round.** Even healthy CHs at the far edge of the
+   field pay full long-distance cost. There is no relay tier.
+
+> **Our motivation in one sentence:** keep low-cost solar-equipped
+> IoT sensor nodes alive for as long as possible, by being smart
+> about *who leads*, *how data flows*, and *when the sun is up*.
+
+## C. What we do — the three contributions of our project
+
+Our protocol stacks **three independent improvements** on top of the
+basic clustering idea:
+
+| # | Contribution | Replaces |
+|---|---|---|
+| 1 | **Genetic Algorithm CH election** with a 4-term solar-aware fitness | Random CH election (LEACH-style) |
+| 2 | **Multi-Sink (MS-CH) relay tier**, sized dynamically to the relay traffic | Single-sink direct-to-BS |
+| 3 | **Solar-aware scoring** that uses the *current* harvest rate, not just battery level | Battery-blind / sun-blind scoring |
+
+These three together form the **3-tier topology** Sensor → CH → MS-CH
+→ BS, which activates **only when needed** (if every CH can reach
+the BS directly this round, the MS-CH tier is skipped entirely).
+
+## D. What we improve — the measurable wins
+
+Compared to the classical LEACH baseline running on the same field
+and same node positions:
+
+| Metric | Improvement on default scenario (50 nodes, 100 m) | Improvement on extreme scenario (1000 nodes, 500 m) |
+|---|---|---|
+| First node death (round) | **+50 to +60%** | **+140%** |
+| Network lifetime | **+20 to +25%** | **+80 to +100%** |
+| Packets delivered to BS | **+35 to +40%** | **+115 to +120%** |
+| Per-round network energy spend | **−20%** | **−48%** |
+| Energy std-dev (lower = more even drainage) | **−50%** | **−40%** |
+
+(Days 4 and 5 walk through how these numbers are produced.)
+
+## E. The role of LEACH in this report
+
+We want to be very explicit about this:
+
+> **LEACH is not part of our protocol.**
+> Our protocol is the **GA Multi-Sink** branch of `solar_ga_wsn.py`
+> (functions `simulate_round_ga`, `run_ga_ch_election`,
+> `pick_path_for_ch`, `elect_ms_chs_kmedoids`, etc.).
+> The LEACH branch (`simulate_round_leach`) exists in the same file
+> **only so we can run a fair side-by-side comparison** on the same
+> world. Every chart, every table, every "GA wins by X%" statement
+> in this report uses LEACH purely as the baseline.
+
+---
+
+# Methodology — formulas, steps and ideas we use
+
+This section is the **one-page summary** of the engineering work in
+the project. Day 3 expands every formula with worked numbers; this
+section is the bird's-eye view.
+
+## A. The five core ideas we apply
+
+1. **Genetic Algorithm for combinatorial CH selection.** A
+   chromosome = a candidate set of `K` Cluster Head IDs. We evolve a
+   population of 30 chromosomes for up to 50 generations using
+   tournament selection, single-point crossover, ID-mutation, and
+   2-elite preservation, with **adaptive mutation** (mutation rate
+   rises if the population stagnates) and **early stop** when the
+   best score plateaus.
+2. **Multi-tier topology that activates on demand.** Sensor → CH →
+   MS-CH → BS. The MS-CH tier is born and dies every round based on
+   how many CHs actually need a relay this round.
+3. **Solar-aware scoring at every selection step.** The current
+   sun-elevation value (a noon-peaked half-sine) is folded into both
+   the GA fitness and the MS-CH election score, so freshly-charging
+   nodes are preferred while they are charging.
+4. **Path-decision rule for each CH.** Each CH independently checks
+   "am I close enough to the BS *and* healthy enough?" — if yes, it
+   ships direct (Path A); otherwise it joins the relay pool (Path B).
+   This is the rule that lets the MS-CH tier disappear when it isn't
+   needed.
+5. **k-medoids + score for MS-CH placement.** We do not just pick the
+   top-`m` highest-scoring relay CHs — that gives clumped MS-CHs.
+   Instead, k-medoids partitions the relay-CH cloud into `m` spatial
+   zones and the highest-scoring CH per zone wins.
+
+## B. The seven formulas we use, in compact form
+
+| # | Formula | Used for |
+|---|---|---|
+| F1 | `E_TX = E_elec·k + E_amp·k·d²` (close) or `+ E_mp·k·d⁴` (far) | Per-bit transmit energy cost (Heinzelman radio model) |
+| F2 | `E_AGG = E_DA · k · n` | Cost of fusing `n` packets at a CH or MS-CH |
+| F3 | `solar(round) = MAX_HARVEST · max(0, sin(π · (h−6)/12))` | Per-round solar harvest curve |
+| F4 | `num_chs = max(1, min(alive, round(alive · CH_PERCENT)))` | Number of CHs to elect this round |
+| F5 | `num_ms = 0  if no relay CHs;  ⌈relay_chs / RELAYS_PER_MS⌉  otherwise` | Number of MS-CHs to elect this round |
+| F6 | `F = 0.25·E + 0.25·S + 0.30·C + 0.20·Sp` | GA chromosome fitness (Energy, Solar, Coverage, Spread) |
+| F7 | `score(ch) = 0.35·Battery + 0.30·Solar + 0.20·Centrality + 0.15·BS_closeness` | Per-CH MS-CH election score |
+
+Plus one **decision rule** (not a formula but a clean if-else):
+
+```
+Path A  ⟺  d_to_BS ≤ DIRECT_DIST  AND  E_residual / E_init ≥ DIRECT_NRG
+Path B  ⟺  otherwise
+```
+
+Defaults: `DIRECT_DIST = 0.55 × FIELD`, `DIRECT_NRG = 0.40`.
+
+## C. The 12 steps of one round (the full procedure we use)
+
+(Implemented in `simulate_round_ga`.)
+
+1. Compute `solar_now` from F3 for the current simulated hour.
+2. Each alive node harvests solar (with 5% Gaussian noise).
+3. Reset every node's role back to "sensor".
+4. Refresh the `World` cache (NumPy arrays of alive nodes).
+5. Compute `num_chs` from F4.
+6. Run the GA → returns the best chromosome (a list of CH IDs).
+7. Promote those nodes to role = "CH".
+8. Apply the path-decision rule to each CH → split into `direct_chs` and `relay_chs`.
+9. Compute `num_ms` from F5.
+10. Run k-medoids on `relay_chs`; for each zone, pick the highest-F7-scorer as MS-CH.
+11. Vector-assign every sensor to its nearest CH (broadcast NumPy distance matrix).
+12. Run the energy traffic with F1 + F2:
+    a. Sensors transmit to their CH.
+    b. CHs aggregate.
+    c. Direct CHs ship to BS, relay CHs ship to their MS-CH.
+    d. Mid-round MS-CH re-election if any MS-CH drops below 15% of `E_init`.
+    e. MS-CHs aggregate again and ship to BS.
+13. Record stats and (every 50 rounds) save a labelled topology snapshot.
+
+The LEACH baseline implements only steps 1–7, then ships every CH
+direct to the BS with no MS-CH layer.
 
 ---
 
@@ -49,7 +227,11 @@ So the question driving 25 years of WSN research is:
 
 > *“How do we keep the network alive longer without changing the hardware?”*
 
-## 1.2 The classical answer (LEACH, year 2000)
+## 1.2 The classical answer (LEACH, year 2000) — *baseline only, not part of our project*
+
+> **Quick reminder:** LEACH is included here only because it is the most-cited
+> WSN comparison baseline in the literature. **Our project's protocol is
+> separate** — see Section 1.3.
 
 Heinzelman et al. proposed **LEACH** in 2000. The idea: pick a small
 number of sensors each round to be **Cluster Heads (CHs)**. The CH:
@@ -70,7 +252,7 @@ it has three problems:
 | **Single sink** | Every CH still has to shout long-distance to the BS — that is the most expensive operation |
 | **Battery-blind** | Does not consider whether a node has solar harvesting, or whether the sun is up right now |
 
-## 1.3 What this project adds
+## 1.3 What our project adds (on top of the LEACH-style skeleton)
 
 `solar_ga_wsn.py` keeps the LEACH skeleton but replaces those three
 weaknesses with smarter mechanisms:
@@ -805,6 +987,17 @@ be CH again for `1/p` rounds.
 side-by-side comparison.** Default-scenario observation: GA extends
 network lifetime by ~20%, packets delivered by ~38%.
 
+**Advantages of LEACH**
+- Extremely simple, fully distributed, no central controller
+- Very low per-round computational cost (random + threshold check)
+- Has become the de-facto baseline — every paper compares against it
+
+**Disadvantages of LEACH**
+- Random CH choice — no awareness of energy, position, coverage, or sun
+- Single sink; every CH pays full long-distance cost every round
+- Battery-blind and sun-blind
+- Tends to produce uneven battery drainage and early "first node death"
+
 ## 6.2 HEED (Hybrid Energy-Efficient Distributed clustering)
 
 **Younis & Fahmy, IEEE TMC 2004.**
@@ -831,6 +1024,17 @@ coverage in a single shot; HEED settles for local optima. The
 multi-sink saving is the bigger structural advantage.
 **Where HEED wins:** scales naturally to thousands of nodes without a
 central optimiser, no GA generations to wait for.
+
+**Advantages of HEED**
+- Distributed, no central controller required
+- Cluster heads end up roughly evenly distributed
+- Considers residual energy as the primary metric
+
+**Disadvantages of HEED**
+- Multiple iterations per round add control-message overhead
+- Battery-blind to *current* solar harvest
+- Single-sink; long shouts to the BS still dominate the bill
+- No coverage term → some sensors can be far from any CH
 
 ## 6.3 PEGASIS (Power-Efficient Gathering in Sensor Information Systems)
 
@@ -860,6 +1064,17 @@ with chain length.
 dense/uniform fields, because the chain inherently uses shortest
 hops everywhere.
 
+**Advantages of PEGASIS**
+- Each hop is short → very low per-hop transmit energy
+- No election overhead; chain is built once and reused
+- Strong total-energy efficiency on uniform, dense fields
+
+**Disadvantages of PEGASIS**
+- Latency grows linearly with chain length (bad for real-time apps)
+- One broken / dead node breaks the chain; no easy recovery
+- No load-balancing — leader role rotates but chain is the same
+- No solar / no multi-sink awareness
+
 ## 6.4 SEP (Stable Election Protocol)
 
 **Smaragdakis et al., 2004.**
@@ -878,6 +1093,15 @@ probability is weighted by initial energy.
 **Where this project wins:** SEP's heterogeneity is *static* (set at
 deployment); ours is *emergent* (a sunny node temporarily becomes
 "advanced" then recedes).
+
+**Advantages of SEP**
+- Handles heterogeneous deployments better than LEACH
+- Simple weight-based extension of LEACH; easy to implement
+
+**Disadvantages of SEP**
+- Heterogeneity is fixed at deployment, not adaptive
+- Still single-sink, still no coverage / no solar awareness
+- Needs prior knowledge of "advanced" vs "normal" node mix
 
 ## 6.5 DEEC (Distributed Energy-Efficient Clustering)
 
@@ -901,6 +1125,16 @@ scheme](https://ar5iv.labs.arxiv.org/html/1304.0635).
 
 **Where this project wins:** solar awareness + multi-sink
 significantly outperform any DEEC variant on solar-equipped nodes.
+
+**Advantages of DEEC**
+- Generalises SEP to arbitrary heterogeneity levels
+- Threshold scales with `E_residual / E_average` → fair load over time
+- Distributed, low control overhead
+
+**Disadvantages of DEEC**
+- Still single-sink — long shouts still dominate
+- Aware of residual *energy* but not of *solar input* right now
+- No coverage / spread term in the election
 
 ## 6.6 K-means-based LEACH (and energy-driven variants)
 
@@ -928,6 +1162,16 @@ the lower-tier CH selection. This is a stronger combination than
 either alone — k-means alone has no learning loop, GA alone has
 no spatial guarantee.
 
+**Advantages of K-means LEACH**
+- Spatial clustering improves CH spread vs random LEACH
+- Easy to implement; fast on small fields
+
+**Disadvantages of K-means LEACH**
+- Greedy: no learning over multiple candidates
+- Pure Euclidean k-means doesn't reflect actual `d⁴` energy cost
+- Single-sink; no solar awareness
+- Centroids are not real nodes (k-means averages); needs a tweak (k-medoids) to be deployable
+
 ## 6.7 GA-UCR (Genetic Algorithm based Unequal Clustering and Routing)
 
 **Researchgate 2022.**
@@ -950,6 +1194,16 @@ separation](https://www.researchgate.net/publication/363583908_GA-UCR_Genetic_Al
 relevant fitness terms (solar + coverage) and a real upper tier.
 **Where GA-UCR wins:** uneven cluster sizing handles non-uniform node
 density elegantly; this project assumes uniform density.
+
+**Advantages of GA-UCR**
+- Genetic search produces near-optimal CHs (3-term fitness)
+- Unequal clustering handles the "hot-spot near BS" problem well
+- Already proven to beat LEACH/HEED in published experiments
+
+**Disadvantages of GA-UCR**
+- No solar / energy-harvesting awareness
+- Single-sink — long shouts to the BS still dominate the energy bill
+- No mid-round adaptive re-election if a CH dies fast
 
 ## 6.8 Improved Sparrow Search Algorithm (ISSA-CH)
 
@@ -975,6 +1229,16 @@ metaheuristic does the optimisation. You could swap the GA for a
 swarm algorithm in `run_ga_ch_election` and the rest of the
 architecture would still hold.
 
+**Advantages of Improved Sparrow Search**
+- Fast convergence on smooth fitness landscapes
+- Handles continuous + discrete search well
+- Reported strong results on edge-computing WSN scenarios
+
+**Disadvantages of Improved Sparrow Search**
+- Still optimising the same objective as everyone else (no solar / no multi-sink)
+- Parameter-sensitive (discoverer ratio, alarm threshold)
+- Less mature literature than GA in the WSN domain
+
 ## 6.9 Grey Wolf Optimisation (GWO-LEACH)
 
 **MDPI Computers 2023.**
@@ -997,6 +1261,16 @@ update positions toward it.
 Same observation as 6.8 — the metaheuristic is cosmetic; the
 *objective function* and the *topology* are what differentiate this
 project.
+
+**Advantages of GWO-LEACH**
+- Robust metaheuristic with few control parameters
+- Works well on multi-modal fitness landscapes
+- Competitive with GA in published comparisons
+
+**Disadvantages of GWO-LEACH**
+- Same scope as LEACH otherwise: single-sink, no solar awareness
+- Convergence can be slower than GA on highly discrete CH-selection problems
+- Improvement over LEACH is largely from the better fitness, not from topology
 
 ## 6.10 MLP-LEACH and ANN-based selection (the modern wave)
 
@@ -1032,6 +1306,17 @@ inspectable. **Where ANN/MLP win:** if you can afford the training,
 they can outperform any hand-crafted fitness on patterns the
 designer didn't anticipate.
 
+**Advantages of MLP / ANN-LEACH**
+- Can learn patterns the designer didn't anticipate
+- Reported huge improvements (one paper reports ~+97% lifetime, ~+57% packets vs LEACH)
+- After training, inference per round is essentially free
+
+**Disadvantages of MLP / ANN-LEACH**
+- Heavy offline training cost; needs simulation-generated training data
+- Black-box: hard to audit individual decisions
+- Distribution-shift risk (deploy on a field not seen at training time)
+- Still no solar awareness or multi-sink in the typical reported setups
+
 ## 6.11 The big comparison table
 
 A single side-by-side. Numbers are *qualitative* unless they appear in
@@ -1063,6 +1348,51 @@ improvement.**
 ---
 
 # Day 7 — Strengths, weaknesses, real-world fit, final verdict
+
+## 7.0 Advantages and disadvantages of our project at a glance
+
+> **Reminder:** this is the score-card of *our* project — Solar Aware
+> Multisink Data Aggregation Protocol Using GA in a Wireless Sensor
+> Assisted IoT.
+
+**Advantages of our project**
+
+- **Three orthogonal LEACH weaknesses fixed simultaneously**
+  (random selection → GA, single-sink → multi-sink, battery-blind → solar-aware).
+- **Solar-aware fitness term** is genuinely novel — uses the *current*
+  harvest rate, not just battery level, so a "tired but charging" node
+  is preferred over a "tired and shaded" node.
+- **3-tier topology that activates only when needed.** When all CHs
+  can reach the BS directly, the MS-CH layer disappears for free.
+- **Big measurable wins:** +50% first-node death and +25% network
+  lifetime on default; ~2 × on extreme scale.
+- **Auditable.** Every weight in F6 (`0.25/0.25/0.30/0.20`) and F7
+  (`0.35/0.30/0.20/0.15`) is in source code, easy to tune.
+- **Honest comparison built in.** The same script runs LEACH on the
+  same world for fair benchmarking.
+- **Engineered for scale.** Vectorised NumPy, batched fitness, World
+  cache, k-medoids — 1000-node simulations run in minutes.
+- **Mid-round MS-CH re-election** (15% threshold) catches the "MS-CH
+  dies trying to make its big BS shout" edge case.
+
+**Disadvantages of our project**
+
+- **Centralised GA.** Requires a controller (typically the BS) that
+  can see all alive nodes' state every round. Real WSNs are often
+  distributed; this is a deployment assumption.
+- **GA stochasticity.** Two runs with different RNG seeds give
+  slightly different lifetime numbers. Trends are stable; specific
+  round numbers are not.
+- **Uniform sensor density assumed.** Highly clumped fields would
+  benefit from GA-UCR-style unequal clusters (we don't have that).
+- **One MS-CH per zone, no redundancy.** If an MS-CH fails (not just
+  runs low) mid-aggregation, the round's relay traffic is dropped.
+- **No mobility.** All nodes are stationary in the simulator.
+- **Solar model is idealised.** Pure half-sine + 5% noise; no clouds,
+  no shadow, no panel ageing.
+- **GA cost grows with population × generations × `K`.** For very
+  large `K` (many CHs) and large `N`, a single round can take
+  seconds; not suited to <100 ms control loops.
 
 ## 7.1 Strengths
 
@@ -1162,6 +1492,133 @@ literature.
 
 ---
 
+# Day 8 — Future Scope
+
+The protocol works and the simulator demonstrates it convincingly.
+This section is the **roadmap** of where we (or anyone building on
+this work) can take it next. We have grouped ideas into four buckets,
+roughly in increasing order of effort.
+
+## 8.1 Short-term improvements (extensions of the existing simulator)
+
+These are changes that fit inside `solar_ga_wsn.py` without
+re-architecting anything.
+
+1. **Realistic solar model.** Replace the pure `sin` curve with
+   recorded irradiance traces (e.g. NREL or NASA POWER datasets).
+   Optionally add cloud-cover events as on/off masks per node.
+2. **Per-node panel size and shade factor.** Right now every node has
+   the same `MAX_HARVEST`. Adding `panel_factor[i] ∈ [0.5, 1.5]` lets
+   us model real deployments where some panels are partially shaded
+   by foliage or buildings.
+3. **Tunable fitness weights.** Expose the four GA weights and four
+   MS-CH weights as `argparse` flags so users can sweep them without
+   editing code.
+4. **Battery non-linearity.** Real Li-ion / NiMH cells lose more
+   energy at low state-of-charge. Add a non-linear discharge curve.
+5. **Configurable packet sizes per round.** Some rounds (e.g. event
+   triggers) ship larger packets. The radio model already handles
+   this; we just need the UI for it.
+6. **Energy cost of the GA itself.** Charge the BS for the GA compute
+   so the report can claim "even after counting controller energy,
+   we still win."
+7. **CSV / JSON metric export.** Write per-round stats to a file so
+   external plotting and statistical tests are easy.
+
+## 8.2 Medium-term — protocol improvements
+
+These change the algorithm itself and would be a publishable
+contribution on top of the current work.
+
+1. **Distributed / federated GA.** Split the GA across multiple
+   "zone leaders" that each run a smaller GA on their region, then a
+   meta-GA combines the regional best. This removes the centralised
+   assumption.
+2. **Redundant MS-CHs.** Elect a primary and a hot-standby MS-CH per
+   zone; the standby takes over if the primary fails (not just dies
+   slowly).
+3. **Unequal clustering near the BS.** Borrow the GA-UCR idea: make
+   clusters near the BS smaller because their CHs do more relay
+   work. Combine with our multi-sink layer for "best of both".
+4. **Multi-objective GA (NSGA-II).** Treat lifetime, latency, and
+   packet-delivery-ratio as separate objectives and produce a
+   Pareto front of CH choices instead of a single weighted sum.
+5. **Adaptive `RELAYS_PER_MS`.** Currently fixed at 4. The optimal
+   value depends on field geometry and battery state — let the
+   protocol learn it round by round.
+6. **QoS-aware paths.** Some packets are urgent (fire detected!),
+   others are routine (temperature). Add a priority bit and route
+   urgent packets via Path A even if the CH is "tired".
+7. **Mobility support.** Allow node positions to drift between
+   rounds (animal trackers, drones). The `World` cache already
+   refreshes every round; we just need a position-update step.
+
+## 8.3 Long-term — research directions
+
+Bigger ideas that would be standalone projects building on top of ours.
+
+1. **Reinforcement-learning controller.** Replace the GA with an RL
+   agent (DQN / PPO) that learns over thousands of episodes. Our
+   GA-derived solutions can serve as the warm-start policy.
+2. **Federated-learning over WSN data.** The same multi-sink topology
+   we use for energy efficiency is also ideal for federated model
+   updates — CHs could partially aggregate model gradients before
+   sending to the BS.
+3. **Hybrid GA + MLP.** Use an MLP to predict per-node "good-CH"
+   probability, feed those probabilities as priors into the GA's
+   initial population. Gets the best of both worlds: GA's auditability
+   plus MLP's pattern recognition.
+4. **Cross-layer optimisation.** Right now we optimise the network
+   layer (who is CH, who relays). Cross-layer would also tune MAC
+   parameters (TDMA slot width) and physical-layer parameters
+   (transmit power) together with CH selection.
+5. **Adversarial / security extensions.** What happens if a node lies
+   about its battery to avoid being elected CH? Add a trust score and
+   re-run the GA with adversarial-aware fitness.
+6. **3D field deployments.** Underwater, mining, multi-storey
+   buildings. The radio model and solar model both need rework but
+   the GA + multi-sink architecture transfers directly.
+7. **Hardware-in-the-loop validation.** Port the protocol to TinyOS
+   or Contiki on real motes (Zolertia, TelosB) and validate the
+   simulator's predictions against measured battery curves.
+
+## 8.4 IoT / application-layer integration
+
+Where this protocol meets real-world deployments.
+
+1. **Smart-farming integration with MQTT/HTTP gateway.** BS posts
+   aggregated readings to a cloud MQTT broker; farm dashboards
+   subscribe.
+2. **Edge-AI hooks.** Run lightweight anomaly detection at MS-CH
+   level so anomalous readings are flagged before they reach the BS.
+3. **OTA firmware update path.** Use the same multi-sink topology in
+   reverse: BS → MS-CH → CH → sensor for delivering firmware updates
+   energy-efficiently.
+4. **Digital twin.** Maintain a real-time digital twin of the field
+   in the cloud, fed by the BS, so the GA fitness weights can be
+   tuned online based on observed deployment behaviour.
+5. **Carbon-footprint accounting.** Solar harvesting is a green
+   feature; tracking total kWh harvested vs grid-equivalent emissions
+   makes the protocol attractive for sustainability-driven deployments.
+
+## 8.5 Validation roadmap
+
+Concrete experiments to run, in priority order:
+
+| # | Experiment | Why it matters |
+|---|---|---|
+| 1 | Re-run default + extreme scenarios with 30 different seeds; report mean ± std | Replaces "expected results" in Days 4–5 with statistically-validated numbers |
+| 2 | Sweep CH_PERCENT ∈ {5%, 10%, 15%, 20%} and find the optimum per field size | Establishes the right control parameter for users |
+| 3 | Compare against an open-source LEACH variant (e.g. LEACH-C) instead of vanilla LEACH | Strengthens the comparison story |
+| 4 | Run on real solar-irradiance traces (NASA POWER) for a chosen city | Tests robustness of the half-sine assumption |
+| 5 | Run on a non-uniform "hot-spot" deployment | Tests where the protocol's "uniform density" assumption breaks |
+| 6 | Implement on a 10-node hardware testbed | Closes the simulation-to-deployment gap |
+
+If we deliver items 1–3 we have a publishable conference paper. If we
+deliver 1–6 we have a journal paper.
+
+---
+
 # Appendix A — Glossary
 
 | Term | Meaning |
@@ -1212,5 +1669,6 @@ reproduction was kept under 30 words per source.
 
 ---
 
-*End of report. Total length: ~7 days × ~1 page each ≈ 7 reading-pages,
-plus appendices.*
+*End of report. Project: Solar Aware Multisink Data Aggregation
+Protocol Using GA in a Wireless Sensor Assisted IoT.
+Sections: Project Identity + Methodology + 8 Days + 2 Appendices.*
